@@ -1,0 +1,47 @@
+{
+  "name": "outbound",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "campaign:load": "npx tsx scripts/campaign-loader.ts",
+    "campaign:auth": "npx tsx scripts/campaign-auth.ts",
+    "campaign:enrich": "npx tsx scripts/campaign-enrich-apollo.ts",
+    "campaign:send": "CAMPAIGN_TEST_MODE=true npx tsx scripts/campaign-send.ts",
+    "campaign:schedule": "npx tsx scripts/campaign-schedule.ts",
+    "enrich:campaigns": "npx tsx scripts/enrich-campaigns.ts",
+    "verify:emails:bulk": "npx tsx scripts/verify-emails-bulk.ts",
+    "validate:findings": "npx tsx scripts/validate-infostealer-findings.ts",
+    "validate:contacts": "npx tsx scripts/validate-infostealer-contacts.ts",
+    "bounces:detect": "npx tsx scripts/detect-bounces.ts",
+    "inbox:add-account": "npx tsx scripts/inbox-add-account.ts",
+    "inbox:auth-gmail": "npx tsx scripts/inbox-auth-gmail.ts",
+    "inbox:activate": "npx tsx scripts/inbox-activate-daily.ts",
+    "inbox:server": "npx tsx apps/inbox/server.ts",
+    "db:setup": "psql $DATABASE_URL -f schema/campaigns.sql && psql $DATABASE_URL -f schema/inbox.sql"
+  },
+  "dependencies": {
+    "axios": "^1.7.7",
+    "csv-parse": "^6.1.0",
+    "dotenv": "^16.4.7",
+    "express": "^4.21.0",
+    "express-rate-limit": "^8.2.1",
+    "googleapis": "^166.0.0",
+    "handlebars": "^4.7.8",
+    "imap": "^0.8.19",
+    "mailparser": "^3.9.0",
+    "nanoid": "^5.1.5",
+    "nodemailer": "^7.0.11",
+    "pg": "^8.16.3",
+    "pino": "^9.6.0",
+    "pino-pretty": "^13.0.0"
+  },
+  "devDependencies": {
+    "@types/express": "^5.0.0",
+    "@types/imap": "^0.8.42",
+    "@types/node": "^22.19.1",
+    "@types/nodemailer": "^7.0.4",
+    "tsx": "^4.20.6",
+    "typescript": "^5.7.2"
+  }
+}

@@ -1,0 +1,19 @@
+<p>Good morning,</p>
+
+<p>While reviewing infostealer data for a client, I found <strong>{{critical_user_count}}</strong> of <strong>{{company_name}}'s</strong> employee credentials in malware logs — including passwords and active sessions from infected devices.</p>
+
+<p><strong>Affected {{#if (eq critical_user_count 1)}}account{{else}}accounts{{/if}}:</strong></p>
+<ul>
+  {{{critical_user_emails}}}
+  {{#if critical_emails_remaining}}
+  <li>...and {{critical_emails_remaining}} more</li>
+  {{/if}}
+</ul>
+
+<p>Want me to send over the details?</p>
+
+<p>Best,<br><br>
+Ryan Heger<br>
+Founder, SimplCyber</p>
+
+{{> _opt_out_footer}}

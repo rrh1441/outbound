@@ -1,0 +1,956 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Unified Inbox</title>
+  <style>
+    :root {
+      --bg-primary: #0f0f0f;
+      --bg-secondary: #1a1a1a;
+      --bg-tertiary: #252525;
+      --text-primary: #ffffff;
+      --text-secondary: #a0a0a0;
+      --accent: #3b82f6;
+      --accent-hover: #2563eb;
+      --danger: #ef4444;
+      --success: #22c55e;
+      --warning: #f59e0b;
+      --border: #333;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: var(--bg-primary);
+      color: var(--text-primary);
+      min-height: 100vh;
+    }
+
+    /* Layout */
+    .app {
+      display: flex;
+      height: 100vh;
+    }
+
+    .sidebar {
+      width: 280px;
+      background: var(--bg-secondary);
+      border-right: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+    }
+
+    .main {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    /* Header */
+    .header {
+      padding: 16px 24px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .header h1 {
+      font-size: 20px;
+      font-weight: 600;
+    }
+
+    .header-actions {
+      display: flex;
+      gap: 8px;
+    }
+
+    /* Sidebar */
+    .sidebar-header {
+      padding: 16px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .compose-btn {
+      width: 100%;
+      padding: 12px;
+      background: var(--accent);
+      color: white;
+      border: none;
+      border-radius: 8px;
+      font-size: 14px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+
+    .compose-btn:hover {
+      background: var(--accent-hover);
+    }
+
+    .nav-section {
+      padding: 12px;
+    }
+
+    .nav-section-title {
+      font-size: 11px;
+      text-transform: uppercase;
+      color: var(--text-secondary);
+      padding: 8px 12px;
+      letter-spacing: 0.5px;
+    }
+
+    .nav-item {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 10px 12px;
+      border-radius: 6px;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+
+    .nav-item:hover {
+      background: var(--bg-tertiary);
+    }
+
+    .nav-item.active {
+      background: var(--accent);
+    }
+
+    .nav-item .badge {
+      margin-left: auto;
+      background: var(--danger);
+      color: white;
+      font-size: 11px;
+      padding: 2px 6px;
+      border-radius: 10px;
+    }
+
+    .accounts-list {
+      flex: 1;
+      overflow-y: auto;
+      padding: 12px;
+    }
+
+    .account-item {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 10px 12px;
+      border-radius: 6px;
+      cursor: pointer;
+      transition: background 0.2s;
+      font-size: 13px;
+    }
+
+    .account-item:hover {
+      background: var(--bg-tertiary);
+    }
+
+    .account-item.active {
+      background: var(--bg-tertiary);
+    }
+
+    .account-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+    }
+
+    .account-dot.gmail { background: #34a853; }
+    .account-dot.microsoft { background: #00a4ef; }
+
+    .account-status {
+      margin-left: auto;
+      font-size: 11px;
+    }
+
+    .status-active { color: var(--success); }
+    .status-error { color: var(--danger); }
+
+    /* Message List */
+    .message-list {
+      flex: 1;
+      overflow-y: auto;
+    }
+
+    .message-item {
+      display: flex;
+      gap: 12px;
+      padding: 16px 24px;
+      border-bottom: 1px solid var(--border);
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+
+    .message-item:hover {
+      background: var(--bg-secondary);
+    }
+
+    .message-item.unread {
+      background: var(--bg-secondary);
+    }
+
+    .message-item.unread .message-from,
+    .message-item.unread .message-subject {
+      font-weight: 600;
+    }
+
+    .message-avatar {
+      width: 40px;
+      height: 40px;
+      border-radius: 50%;
+      background: var(--bg-tertiary);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 14px;
+      font-weight: 500;
+      flex-shrink: 0;
+    }
+
+    .message-content {
+      flex: 1;
+      min-width: 0;
+    }
+
+    .message-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 4px;
+    }
+
+    .message-from {
+      font-size: 14px;
+    }
+
+    .message-date {
+      font-size: 12px;
+      color: var(--text-secondary);
+    }
+
+    .message-subject {
+      font-size: 14px;
+      margin-bottom: 4px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .message-snippet {
+      font-size: 13px;
+      color: var(--text-secondary);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .message-account {
+      font-size: 11px;
+      color: var(--text-secondary);
+      margin-top: 4px;
+    }
+
+    .direction-badge {
+      font-size: 10px;
+      padding: 2px 6px;
+      border-radius: 4px;
+      margin-left: 8px;
+    }
+
+    .direction-inbound {
+      background: rgba(59, 130, 246, 0.2);
+      color: var(--accent);
+    }
+
+    .direction-outbound {
+      background: rgba(34, 197, 94, 0.2);
+      color: var(--success);
+    }
+
+    /* Message View */
+    .message-view {
+      flex: 1;
+      display: none;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    .message-view.active {
+      display: flex;
+    }
+
+    .message-view-header {
+      padding: 24px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .message-view-subject {
+      font-size: 20px;
+      font-weight: 600;
+      margin-bottom: 16px;
+    }
+
+    .message-view-meta {
+      display: flex;
+      gap: 16px;
+      font-size: 14px;
+      color: var(--text-secondary);
+    }
+
+    .message-view-body {
+      flex: 1;
+      overflow-y: auto;
+      padding: 24px;
+    }
+
+    .message-view-body iframe {
+      width: 100%;
+      min-height: 400px;
+      border: none;
+      background: white;
+      border-radius: 8px;
+    }
+
+    .message-view-actions {
+      padding: 16px 24px;
+      border-top: 1px solid var(--border);
+      display: flex;
+      gap: 12px;
+    }
+
+    /* Buttons */
+    .btn {
+      padding: 8px 16px;
+      border-radius: 6px;
+      font-size: 14px;
+      cursor: pointer;
+      transition: all 0.2s;
+      border: 1px solid var(--border);
+      background: var(--bg-secondary);
+      color: var(--text-primary);
+    }
+
+    .btn:hover {
+      background: var(--bg-tertiary);
+    }
+
+    .btn-primary {
+      background: var(--accent);
+      border-color: var(--accent);
+    }
+
+    .btn-primary:hover {
+      background: var(--accent-hover);
+    }
+
+    /* Compose Modal */
+    .modal-overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: rgba(0, 0, 0, 0.7);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      z-index: 1000;
+    }
+
+    .modal-overlay.active {
+      display: flex;
+    }
+
+    .modal {
+      background: var(--bg-secondary);
+      border-radius: 12px;
+      width: 700px;
+      max-width: 90vw;
+      max-height: 90vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .modal-header {
+      padding: 16px 20px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .modal-header h2 {
+      font-size: 16px;
+      font-weight: 600;
+    }
+
+    .modal-close {
+      background: none;
+      border: none;
+      color: var(--text-secondary);
+      font-size: 24px;
+      cursor: pointer;
+    }
+
+    .modal-body {
+      padding: 20px;
+      flex: 1;
+      overflow-y: auto;
+    }
+
+    .form-group {
+      margin-bottom: 16px;
+    }
+
+    .form-group label {
+      display: block;
+      font-size: 13px;
+      color: var(--text-secondary);
+      margin-bottom: 6px;
+    }
+
+    .form-group input,
+    .form-group select,
+    .form-group textarea {
+      width: 100%;
+      padding: 10px 12px;
+      background: var(--bg-tertiary);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      color: var(--text-primary);
+      font-size: 14px;
+    }
+
+    .form-group input:focus,
+    .form-group select:focus,
+    .form-group textarea:focus {
+      outline: none;
+      border-color: var(--accent);
+    }
+
+    .form-group textarea {
+      min-height: 200px;
+      resize: vertical;
+      font-family: inherit;
+    }
+
+    .modal-footer {
+      padding: 16px 20px;
+      border-top: 1px solid var(--border);
+      display: flex;
+      justify-content: flex-end;
+      gap: 12px;
+    }
+
+    /* Stats Bar */
+    .stats-bar {
+      display: flex;
+      gap: 24px;
+      padding: 12px 24px;
+      background: var(--bg-secondary);
+      border-bottom: 1px solid var(--border);
+      font-size: 13px;
+    }
+
+    .stat-item {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .stat-value {
+      font-weight: 600;
+    }
+
+    /* Loading */
+    .loading {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 40px;
+      color: var(--text-secondary);
+    }
+
+    /* Empty State */
+    .empty-state {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 60px 20px;
+      color: var(--text-secondary);
+    }
+
+    .empty-state h3 {
+      margin-bottom: 8px;
+      color: var(--text-primary);
+    }
+
+    /* Toast Notifications */
+    .toast-container {
+      position: fixed;
+      bottom: 20px;
+      right: 20px;
+      z-index: 2000;
+    }
+
+    .toast {
+      background: var(--bg-secondary);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 12px 16px;
+      margin-top: 8px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      animation: slideIn 0.3s ease;
+    }
+
+    .toast.success { border-left: 3px solid var(--success); }
+    .toast.error { border-left: 3px solid var(--danger); }
+
+    @keyframes slideIn {
+      from { transform: translateX(100%); opacity: 0; }
+      to { transform: translateX(0); opacity: 1; }
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <!-- Sidebar -->
+    <aside class="sidebar">
+      <div class="sidebar-header">
+        <button class="compose-btn" onclick="openCompose()">+ Compose</button>
+      </div>
+
+      <nav class="nav-section">
+        <div class="nav-section-title">Inbox</div>
+        <div class="nav-item active" onclick="filterMessages('inbound')" data-filter="inbound">
+          <span>Received</span>
+          <span class="badge" id="unread-badge" style="display: none;">0</span>
+        </div>
+        <div class="nav-item" onclick="filterMessages('outbound')" data-filter="outbound">
+          <span>Sent</span>
+        </div>
+        <div class="nav-item" onclick="filterMessages('all')" data-filter="all">
+          <span>All Messages</span>
+        </div>
+      </nav>
+
+      <div class="nav-section">
+        <div class="nav-section-title">Accounts</div>
+        <div class="nav-item" onclick="filterByAccount(null)">
+          <span>All Accounts</span>
+        </div>
+      </div>
+
+      <div class="accounts-list" id="accounts-list">
+        <!-- Populated by JS -->
+      </div>
+    </aside>
+
+    <!-- Main Content -->
+    <main class="main">
+      <header class="header">
+        <h1>Unified Inbox</h1>
+        <div class="header-actions">
+          <button class="btn" onclick="syncMessages()">Sync All</button>
+        </div>
+      </header>
+
+      <div class="stats-bar" id="stats-bar">
+        <div class="stat-item">
+          <span>Accounts:</span>
+          <span class="stat-value" id="stat-accounts">-</span>
+        </div>
+        <div class="stat-item">
+          <span>Unread:</span>
+          <span class="stat-value" id="stat-unread">-</span>
+        </div>
+        <div class="stat-item">
+          <span>Sent Today:</span>
+          <span class="stat-value" id="stat-sent-today">-</span>
+        </div>
+      </div>
+
+      <div class="message-list" id="message-list">
+        <div class="loading">Loading messages...</div>
+      </div>
+
+      <div class="message-view" id="message-view">
+        <div class="message-view-header">
+          <h2 class="message-view-subject" id="view-subject"></h2>
+          <div class="message-view-meta">
+            <span id="view-from"></span>
+            <span id="view-date"></span>
+            <span id="view-account"></span>
+          </div>
+        </div>
+        <div class="message-view-body">
+          <iframe id="view-body" sandbox="allow-same-origin"></iframe>
+        </div>
+        <div class="message-view-actions">
+          <button class="btn" onclick="closeMessageView()">Back</button>
+          <button class="btn btn-primary" onclick="replyToMessage()">Reply</button>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <!-- Compose Modal -->
+  <div class="modal-overlay" id="compose-modal">
+    <div class="modal">
+      <div class="modal-header">
+        <h2>New Message</h2>
+        <button class="modal-close" onclick="closeCompose()">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="form-group">
+          <label>From Account</label>
+          <select id="compose-from">
+            <!-- Populated by JS -->
+          </select>
+        </div>
+        <div class="form-group">
+          <label>To</label>
+          <input type="email" id="compose-to" placeholder="recipient@example.com">
+        </div>
+        <div class="form-group">
+          <label>Subject</label>
+          <input type="text" id="compose-subject">
+        </div>
+        <div class="form-group">
+          <label>Message</label>
+          <textarea id="compose-body" placeholder="Write your message..."></textarea>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn" onclick="closeCompose()">Cancel</button>
+        <button class="btn btn-primary" onclick="sendEmail()">Send</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast Container -->
+  <div class="toast-container" id="toast-container"></div>
+
+  <script>
+    // State
+    let accounts = [];
+    let messages = [];
+    let currentFilter = 'inbound';
+    let currentAccountId = null;
+    let currentMessage = null;
+    let replyToMessageId = null;
+
+    // Initialize
+    document.addEventListener('DOMContentLoaded', () => {
+      loadAccounts();
+      loadMessages();
+      loadStats();
+    });
+
+    // API Functions
+    async function loadAccounts() {
+      try {
+        const res = await fetch('/api/accounts');
+        const data = await res.json();
+        accounts = data.accounts;
+        renderAccounts();
+        populateFromSelect();
+      } catch (err) {
+        showToast('Failed to load accounts', 'error');
+      }
+    }
+
+    async function loadMessages() {
+      try {
+        const params = new URLSearchParams();
+        if (currentFilter !== 'all') {
+          params.set('direction', currentFilter);
+        }
+        if (currentAccountId) {
+          params.set('account_id', currentAccountId);
+        }
+
+        const res = await fetch(`/api/messages?${params}`);
+        const data = await res.json();
+        messages = data.messages;
+        renderMessages();
+      } catch (err) {
+        showToast('Failed to load messages', 'error');
+      }
+    }
+
+    async function loadStats() {
+      try {
+        const res = await fetch('/api/stats');
+        const data = await res.json();
+
+        document.getElementById('stat-accounts').textContent = `${data.active_accounts}/${data.total_accounts}`;
+        document.getElementById('stat-unread').textContent = data.unread_count || 0;
+        document.getElementById('stat-sent-today').textContent = data.sent_today || 0;
+
+        const badge = document.getElementById('unread-badge');
+        if (data.unread_count > 0) {
+          badge.style.display = 'inline';
+          badge.textContent = data.unread_count;
+        } else {
+          badge.style.display = 'none';
+        }
+      } catch (err) {
+        console.error('Failed to load stats', err);
+      }
+    }
+
+    async function syncMessages() {
+      showToast('Syncing messages...', 'info');
+      try {
+        const res = await fetch('/api/sync', { method: 'POST' });
+        const data = await res.json();
+        showToast(`Synced ${data.synced} messages`, 'success');
+        loadMessages();
+        loadStats();
+      } catch (err) {
+        showToast('Sync failed: ' + err.message, 'error');
+      }
+    }
+
+    async function sendEmail() {
+      const accountId = document.getElementById('compose-from').value;
+      const to = document.getElementById('compose-to').value;
+      const subject = document.getElementById('compose-subject').value;
+      const body = document.getElementById('compose-body').value;
+
+      if (!accountId || !to || !subject || !body) {
+        showToast('Please fill in all fields', 'error');
+        return;
+      }
+
+      try {
+        const res = await fetch('/api/send', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            account_id: accountId,
+            to,
+            subject,
+            body_html: body.replace(/\n/g, '<br>'),
+            body_text: body,
+            reply_to_message_id: replyToMessageId
+          })
+        });
+
+        const data = await res.json();
+
+        if (data.error) {
+          showToast(data.error, 'error');
+          return;
+        }
+
+        showToast('Email sent!', 'success');
+        closeCompose();
+        loadMessages();
+        loadStats();
+      } catch (err) {
+        showToast('Failed to send: ' + err.message, 'error');
+      }
+    }
+
+    // Render Functions
+    function renderAccounts() {
+      const container = document.getElementById('accounts-list');
+      container.innerHTML = accounts.map(acc => `
+        <div class="account-item ${currentAccountId === acc.id ? 'active' : ''}"
+             onclick="filterByAccount('${acc.id}')">
+          <span class="account-dot ${acc.provider}"></span>
+          <span>${acc.email}</span>
+          <span class="account-status status-${acc.status}">${acc.status === 'active' ? '' : acc.status}</span>
+        </div>
+      `).join('');
+    }
+
+    function renderMessages() {
+      const container = document.getElementById('message-list');
+
+      if (messages.length === 0) {
+        container.innerHTML = `
+          <div class="empty-state">
+            <h3>No messages</h3>
+            <p>Click "Sync All" to fetch messages from your accounts</p>
+          </div>
+        `;
+        return;
+      }
+
+      container.innerHTML = messages.map(msg => `
+        <div class="message-item ${msg.is_read ? '' : 'unread'}" onclick="openMessage('${msg.id}')">
+          <div class="message-avatar">${getInitials(msg.direction === 'inbound' ? msg.from_email : msg.to_email)}</div>
+          <div class="message-content">
+            <div class="message-header">
+              <span class="message-from">${msg.direction === 'inbound' ? msg.from_name || msg.from_email : msg.to_email}</span>
+              <span class="message-date">${formatDate(msg.sent_at)}</span>
+            </div>
+            <div class="message-subject">${escapeHtml(msg.subject)}</div>
+            <div class="message-snippet">${escapeHtml(msg.snippet || '')}</div>
+            <div class="message-account">
+              via ${msg.account_email}
+              <span class="direction-badge direction-${msg.direction}">${msg.direction}</span>
+            </div>
+          </div>
+        </div>
+      `).join('');
+    }
+
+    function populateFromSelect() {
+      const select = document.getElementById('compose-from');
+      select.innerHTML = accounts
+        .filter(a => a.status === 'active')
+        .map(acc => `<option value="${acc.id}">${acc.email} (${acc.provider})</option>`)
+        .join('');
+    }
+
+    // Actions
+    function filterMessages(filter) {
+      currentFilter = filter;
+      document.querySelectorAll('.nav-item[data-filter]').forEach(el => {
+        el.classList.toggle('active', el.dataset.filter === filter);
+      });
+      loadMessages();
+    }
+
+    function filterByAccount(accountId) {
+      currentAccountId = accountId;
+      renderAccounts();
+      loadMessages();
+    }
+
+    async function openMessage(id) {
+      try {
+        const res = await fetch(`/api/messages/${id}`);
+        const data = await res.json();
+        currentMessage = data.message;
+
+        document.getElementById('view-subject').textContent = currentMessage.subject;
+        document.getElementById('view-from').textContent = `From: ${currentMessage.from_name || currentMessage.from_email}`;
+        document.getElementById('view-date').textContent = formatDate(currentMessage.sent_at);
+        document.getElementById('view-account').textContent = `via ${currentMessage.account_email}`;
+
+        const iframe = document.getElementById('view-body');
+        const content = currentMessage.body_html || currentMessage.body_text?.replace(/\n/g, '<br>') || '';
+        iframe.srcdoc = `
+          <!DOCTYPE html>
+          <html>
+          <head>
+            <style>
+              body { font-family: -apple-system, sans-serif; font-size: 14px; padding: 20px; margin: 0; }
+              img { max-width: 100%; }
+            </style>
+          </head>
+          <body>${content}</body>
+          </html>
+        `;
+
+        document.getElementById('message-list').style.display = 'none';
+        document.getElementById('message-view').classList.add('active');
+
+        // Refresh list to update read status
+        loadMessages();
+        loadStats();
+      } catch (err) {
+        showToast('Failed to load message', 'error');
+      }
+    }
+
+    function closeMessageView() {
+      document.getElementById('message-list').style.display = 'block';
+      document.getElementById('message-view').classList.remove('active');
+      currentMessage = null;
+    }
+
+    function openCompose() {
+      replyToMessageId = null;
+      document.getElementById('compose-to').value = '';
+      document.getElementById('compose-subject').value = '';
+      document.getElementById('compose-body').value = '';
+      document.getElementById('compose-modal').classList.add('active');
+    }
+
+    function closeCompose() {
+      document.getElementById('compose-modal').classList.remove('active');
+    }
+
+    function replyToMessage() {
+      if (!currentMessage) return;
+
+      replyToMessageId = currentMessage.id;
+
+      // Find account for reply
+      const account = accounts.find(a => a.email === currentMessage.account_email);
+      if (account) {
+        document.getElementById('compose-from').value = account.id;
+      }
+
+      document.getElementById('compose-to').value = currentMessage.direction === 'inbound'
+        ? currentMessage.from_email
+        : currentMessage.to_email;
+
+      const subject = currentMessage.subject;
+      document.getElementById('compose-subject').value = subject.startsWith('Re:') ? subject : `Re: ${subject}`;
+
+      document.getElementById('compose-body').value = `\n\n---\nOn ${formatDate(currentMessage.sent_at)}, ${currentMessage.from_email} wrote:\n\n${currentMessage.body_text || ''}`;
+
+      document.getElementById('compose-modal').classList.add('active');
+    }
+
+    // Utilities
+    function getInitials(email) {
+      if (!email) return '?';
+      const name = email.split('@')[0];
+      return name.substring(0, 2).toUpperCase();
+    }
+
+    function formatDate(dateStr) {
+      const date = new Date(dateStr);
+      const now = new Date();
+      const diff = now - date;
+
+      if (diff < 86400000) { // Less than 24 hours
+        return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      } else if (diff < 604800000) { // Less than 7 days
+        return date.toLocaleDateString([], { weekday: 'short' });
+      }
+      return date.toLocaleDateString([], { month: 'short', day: 'numeric' });
+    }
+
+    function escapeHtml(text) {
+      if (!text) return '';
+      const div = document.createElement('div');
+      div.textContent = text;
+      return div.innerHTML;
+    }
+
+    function showToast(message, type = 'info') {
+      const container = document.getElementById('toast-container');
+      const toast = document.createElement('div');
+      toast.className = `toast ${type}`;
+      toast.textContent = message;
+      container.appendChild(toast);
+
+      setTimeout(() => {
+        toast.remove();
+      }, 4000);
+    }
+  </script>
+</body>
+</html>
