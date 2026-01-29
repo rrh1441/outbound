@@ -10,6 +10,7 @@ import type { Transporter } from 'nodemailer';
 import Imap from 'imap';
 import { simpleParser, ParsedMail } from 'mailparser';
 import { google, gmail_v1 } from 'googleapis';
+import { AgentMailClient } from 'agentmail';
 import { decryptCredentials } from './crypto.js';
 
 // Microsoft OAuth token refresh
@@ -46,8 +47,8 @@ export interface SenderAccount {
   id: string;
   email: string;
   display_name: string | null;
-  provider: 'gmail' | 'microsoft';
-  auth_type: 'oauth' | 'password';
+  provider: 'gmail' | 'microsoft' | 'agentmail';
+  auth_type: 'oauth' | 'password' | 'api_key';
   credentials_encrypted: string;
   credentials_iv: string;
   credentials_tag: string;
@@ -58,6 +59,7 @@ export interface SenderAccount {
   status: string;
   daily_limit: number;
   emails_sent_today: number;
+  agentmail_inbox_id: string | null;
 }
 
 export interface SendEmailOptions {
@@ -174,6 +176,11 @@ export class EmailClient {
    * Send an email
    */
   async sendEmail(options: SendEmailOptions): Promise<{ messageId: string }> {
+    // Use AgentMail for agentmail accounts
+    if (this.account.provider === 'agentmail') {
+      return this.sendViaAgentMail(options);
+    }
+
     // Use Gmail API for OAuth Gmail accounts
     if (this.account.provider === 'gmail' && this.account.auth_type === 'oauth') {
       return this.sendViaGmailApi(options);
@@ -181,6 +188,39 @@ export class EmailClient {
 
     // Use SMTP for everything else
     return this.sendViaSmtp(options);
+  }
+
+  /**
+   * Send via AgentMail API
+   */
+  private async sendViaAgentMail(options: SendEmailOptions): Promise<{ messageId: string }> {
+    const apiKey = process.env.AGENTMAIL_API_KEY;
+    if (!apiKey) {
+      throw new Error('AGENTMAIL_API_KEY not set');
+    }
+    if (!this.account.agentmail_inbox_id) {
+      throw new Error('AgentMail inbox ID not configured for this account');
+    }
+
+    const client = new AgentMailClient({ apiKey });
+
+    const result = await client.inboxes.messages.send(this.account.agentmail_inbox_id, {
+      to: [options.to],
+      subject: options.subject,
+      text: options.bodyText || this.stripHtml(options.bodyHtml),
+      html: options.bodyHtml,
+      replyTo: options.replyTo ? [options.replyTo] : undefined,
+      headers: options.headers,
+    });
+
+    return { messageId: result.messageId };
+  }
+
+  /**
+   * Strip HTML tags to get plain text
+   */
+  private stripHtml(html: string): string {
+    return html.replace(/<[^>]*>/g, '').replace(/\s+/g, ' ').trim();
   }
 
   /**

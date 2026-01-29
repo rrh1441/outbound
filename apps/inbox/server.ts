@@ -6,6 +6,7 @@
  */
 
 import express from 'express';
+import crypto from 'crypto';
 import { config } from 'dotenv';
 import { getPool } from '../../lib/database.js';
 import { createEmailClient, SenderAccount, EmailMessage } from './core/email-client.js';
