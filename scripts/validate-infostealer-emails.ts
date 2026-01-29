@@ -9,7 +9,7 @@ dotenv.config();
 
 import { getPool } from '../lib/database.js';
 import { createApolloClientFromEnv } from '../apps/campaigns/core/apollo-client.js';
-import { createModuleLogger } from '../apps/workers/core/logger.js';
+import { createModuleLogger } from '../lib/logger.js';
 
 const log = createModuleLogger('validate-infostealer');
 

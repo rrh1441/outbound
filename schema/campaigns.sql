@@ -36,7 +36,8 @@ CREATE TABLE IF NOT EXISTS campaigns (
 CREATE TABLE IF NOT EXISTS campaign_prospects (
   id TEXT PRIMARY KEY DEFAULT ('prospect-' || floor(random() * 1000000000)::text),
   campaign_id TEXT NOT NULL REFERENCES campaigns(id) ON DELETE CASCADE,
-  scan_id TEXT NOT NULL REFERENCES scans(id), -- source of intelligence
+  source_id TEXT NOT NULL, -- generic ID from your data source
+  source_type TEXT NOT NULL DEFAULT 'api', -- 'api', 'csv', 'manual'
 
   -- Contact information
   company_name TEXT,
@@ -44,12 +45,6 @@ CREATE TABLE IF NOT EXISTS campaign_prospects (
   contact_email TEXT NOT NULL,
   contact_name TEXT,
   contact_title TEXT,
-
-  -- Intelligence summary (denormalized for performance)
-  critical_user_count INTEGER DEFAULT 0,
-  medium_user_count INTEGER DEFAULT 0,
-  total_eal_ml NUMERIC(12,2), -- from scan_eal_summary
-  top_risk_categories TEXT[], -- e.g., ['EMAIL_AUTH', 'TLS', 'BREACH']
 
   -- Tracking
   tracking_token TEXT UNIQUE NOT NULL, -- embed in email for thread tracking
@@ -69,7 +64,7 @@ CREATE TABLE IF NOT EXISTS campaign_prospects (
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
 
-  UNIQUE(campaign_id, scan_id) -- one prospect per scan per campaign
+  UNIQUE(campaign_id, source_id) -- one prospect per source per campaign
 );
 
 -- Email events (sent and received messages)
@@ -132,7 +127,7 @@ CREATE TABLE IF NOT EXISTS campaign_tracking (
 
 -- Indexes for performance
 CREATE INDEX IF NOT EXISTS idx_campaign_prospects_campaign_id ON campaign_prospects(campaign_id);
-CREATE INDEX IF NOT EXISTS idx_campaign_prospects_scan_id ON campaign_prospects(scan_id);
+CREATE INDEX IF NOT EXISTS idx_campaign_prospects_source_id ON campaign_prospects(source_id);
 CREATE INDEX IF NOT EXISTS idx_campaign_prospects_status ON campaign_prospects(status);
 CREATE INDEX IF NOT EXISTS idx_campaign_prospects_tracking_token ON campaign_prospects(tracking_token);
 CREATE INDEX IF NOT EXISTS idx_campaign_prospects_gmail_thread_id ON campaign_prospects(gmail_thread_id);
@@ -172,7 +167,7 @@ AFTER INSERT OR UPDATE ON campaign_prospects
 FOR EACH ROW
 EXECUTE FUNCTION update_campaign_stats();
 
--- View: Campaign performance with EAL attribution
+-- View: Campaign performance
 CREATE OR REPLACE VIEW campaign_performance AS
 SELECT
   c.id as campaign_id,
@@ -189,24 +184,12 @@ SELECT
   CASE WHEN c.emails_sent > 0 THEN ROUND(c.emails_replied::NUMERIC / c.emails_sent * 100, 2) ELSE 0 END as reply_rate_pct,
   CASE WHEN c.emails_sent > 0 THEN ROUND(c.meetings_booked::NUMERIC / c.emails_sent * 100, 2) ELSE 0 END as meeting_rate_pct,
 
-  -- EAL intelligence aggregates
-  SUM(p.total_eal_ml) as total_addressable_risk_ml,
-  AVG(p.total_eal_ml) as avg_risk_per_prospect_ml,
-  SUM(CASE WHEN p.status = 'replied' THEN p.total_eal_ml ELSE 0 END) as total_risk_engaged_ml,
-
-  -- Critical exposure counts
-  SUM(p.critical_user_count) as total_critical_users,
-  SUM(p.medium_user_count) as total_medium_users,
-
   c.created_at,
   c.started_at,
   c.completed_at
-FROM campaigns c
-LEFT JOIN campaign_prospects p ON p.campaign_id = c.id
-GROUP BY c.id, c.name, c.status, c.total_prospects, c.emails_sent, c.emails_opened,
-         c.emails_replied, c.meetings_booked, c.created_at, c.started_at, c.completed_at;
+FROM campaigns c;
 
--- View: Prospect detail with scan intelligence
+-- View: Prospect detail
 CREATE OR REPLACE VIEW campaign_prospect_details AS
 SELECT
   p.id as prospect_id,
@@ -217,15 +200,8 @@ SELECT
   p.contact_name,
   p.status as prospect_status,
   p.tracking_token,
-
-  -- Intelligence from scan
-  s.id as scan_id,
-  s.created_at as scan_date,
-  s.findings_count,
-  p.total_eal_ml,
-  p.critical_user_count,
-  p.medium_user_count,
-  p.top_risk_categories,
+  p.source_id,
+  p.source_type,
 
   -- Engagement timeline
   p.last_sent_at,
@@ -240,8 +216,7 @@ SELECT
   p.gmail_thread_id,
   (SELECT COUNT(*) FROM campaign_emails WHERE prospect_id = p.id AND direction = 'outbound') as emails_sent_count,
   (SELECT COUNT(*) FROM campaign_emails WHERE prospect_id = p.id AND direction = 'inbound') as emails_received_count
-FROM campaign_prospects p
-LEFT JOIN scans s ON s.id = p.scan_id;
+FROM campaign_prospects p;
 
 -- Success message
 SELECT 'Campaign tracking schema created successfully!' as status;

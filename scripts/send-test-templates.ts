@@ -8,7 +8,10 @@ config();
 
 const pool = new Pool({ connectionString: process.env.DATABASE_URL || 'postgresql://localhost/scanner_local' });
 const INBOX_API_URL = process.env.INBOX_API_URL || 'http://localhost:3847';
-const TEST_EMAIL = 'ryanrheger@gmail.com';
+const TEST_EMAIL = process.env.CAMPAIGN_TEST_RECIPIENT || process.env.TEST_EMAIL;
+if (!TEST_EMAIL) {
+  throw new Error('Set CAMPAIGN_TEST_RECIPIENT or TEST_EMAIL in .env');
+}
 
 // Get one queued prospect from each template type
 async function getTestProspects() {
@@ -122,7 +125,7 @@ async function main() {
     }
   }
   
-  console.log('✨ Done! Check ryanrheger@gmail.com for test emails.');
+  console.log(`✨ Done! Check ${TEST_EMAIL} for test emails.`);
   await pool.end();
 }
 

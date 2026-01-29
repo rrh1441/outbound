@@ -13,7 +13,10 @@ config();
 
 const pool = getPool();
 const INBOX_API_URL = process.env.INBOX_API_URL || 'http://localhost:3847';
-const TEST_EMAIL = 'ryanrheger@gmail.com';
+const TEST_EMAIL = process.env.CAMPAIGN_TEST_RECIPIENT || process.env.TEST_EMAIL;
+if (!TEST_EMAIL) {
+  throw new Error('Set CAMPAIGN_TEST_RECIPIENT or TEST_EMAIL in .env');
+}
 
 const NOTABLE_DOMAINS = [
   'buffer.com'

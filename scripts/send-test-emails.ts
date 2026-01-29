@@ -5,6 +5,10 @@ import 'dotenv/config';
 import { getPool } from '../lib/database.js';
 
 const pool = getPool();
+const TEST_EMAIL = process.env.CAMPAIGN_TEST_RECIPIENT || process.env.TEST_EMAIL;
+if (!TEST_EMAIL) {
+  throw new Error('Set CAMPAIGN_TEST_RECIPIENT or TEST_EMAIL in .env');
+}
 
 function decryptCredentials(encrypted: string, iv: string, tag: string): any {
   const key = Buffer.from(process.env.SENDER_ENCRYPTION_KEY!, 'hex');
@@ -19,7 +23,7 @@ async function sendTestEmails() {
   const result = await pool.query('SELECT * FROM sender_accounts ORDER BY email');
   const accounts = result.rows;
 
-  console.log(`Sending test emails from ${accounts.length} accounts to ryanrheger@gmail.com\n`);
+  console.log(`Sending test emails from ${accounts.length} accounts to ${TEST_EMAIL}\n`);
 
   let success = 0;
   let failed = 0;
@@ -50,7 +54,7 @@ async function sendTestEmails() {
         const boundary = `boundary_${Date.now()}`;
         const message = [
           `From: ${account.email}`,
-          `To: ryanrheger@gmail.com`,
+          `To: ${TEST_EMAIL}`,
           `Subject: ${subject}`,
           `Content-Type: multipart/alternative; boundary="${boundary}"`,
           '',
@@ -89,7 +93,7 @@ async function sendTestEmails() {
 
         await transporter.sendMail({
           from: account.email,
-          to: 'ryanrheger@gmail.com',
+          to: TEST_EMAIL,
           subject,
           text: bodyText,
           html: bodyHtml

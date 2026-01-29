@@ -22,7 +22,7 @@ import {
   ValidationResult,
   ContactToValidate,
 } from '../lib/campaigns/validation-service.js';
-import { createModuleLogger } from '../apps/workers/core/logger.js';
+import { createModuleLogger } from '../lib/logger.js';
 
 config();
 
