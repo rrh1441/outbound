@@ -9,6 +9,7 @@
 
 import { config } from 'dotenv';
 import * as readline from 'readline';
+import { AgentMailClient } from 'agentmail';
 import { encryptCredentials, generateEncryptionKey } from '../apps/inbox/core/crypto.js';
 import { EmailClient, SenderAccount } from '../apps/inbox/core/email-client.js';
 import { getPool } from '../lib/database.js';
@@ -85,12 +86,75 @@ async function addAccount() {
   }
 
   // Get provider
-  const providerInput = await question('Provider (gmail/microsoft) [microsoft]: ');
-  const provider = (providerInput.toLowerCase() || 'microsoft') as 'gmail' | 'microsoft';
+  const providerInput = await question('Provider (agentmail/gmail/microsoft) [agentmail]: ');
+  const provider = (providerInput.toLowerCase() || 'agentmail') as 'gmail' | 'microsoft' | 'agentmail';
 
-  if (!['gmail', 'microsoft'].includes(provider)) {
-    console.error('❌ Invalid provider. Use "gmail" or "microsoft"');
+  if (!['gmail', 'microsoft', 'agentmail'].includes(provider)) {
+    console.error('❌ Invalid provider. Use "agentmail", "gmail", or "microsoft"');
     process.exit(1);
+  }
+
+  // AgentMail setup
+  if (provider === 'agentmail') {
+    const apiKey = process.env.AGENTMAIL_API_KEY;
+    if (!apiKey) {
+      console.error('❌ Set AGENTMAIL_API_KEY in .env first');
+      process.exit(1);
+    }
+
+    const inboxId = await question('AgentMail Inbox ID (from console.agentmail.to): ');
+    if (!inboxId) {
+      console.error('❌ Inbox ID is required');
+      process.exit(1);
+    }
+
+    console.log('\n⏳ Testing AgentMail connection...');
+    const client = new AgentMailClient({ apiKey });
+
+    let inbox: { inboxId: string; displayName?: string };
+    try {
+      inbox = await client.inboxes.get(inboxId);
+      console.log(`✅ Connected: ${inbox.inboxId}`);
+    } catch (err: any) {
+      console.error(`❌ Failed to connect to AgentMail: ${err.message}`);
+      process.exit(1);
+    }
+
+    // InboxId is the email address
+    const inboxEmail = inbox.inboxId;
+    const displayName = await question(`Display name [${inbox.displayName || inboxEmail.split('@')[0]}]: `);
+
+    // Store - credentials are in env, just store inbox reference
+    const credentials = { inbox_id: inboxId };
+    const encrypted = encryptCredentials(credentials);
+
+    // Get daily limit
+    const limitInput = await question('Daily send limit [50]: ');
+    const dailyLimit = parseInt(limitInput) || 50;
+
+    // Get tags
+    const tagsInput = await question('Tags (comma-separated, e.g., tips,primary): ');
+    const tags = tagsInput ? tagsInput.split(',').map(t => t.trim()) : [];
+
+    await pool.query(`
+      INSERT INTO sender_accounts (
+        email, display_name, provider, auth_type,
+        credentials_encrypted, credentials_iv, credentials_tag,
+        agentmail_inbox_id, daily_limit, tags, status
+      ) VALUES ($1, $2, 'agentmail', 'api_key', $3, $4, $5, $6, $7, $8, 'active')
+    `, [
+      inboxEmail,
+      displayName || inbox.displayName || inboxEmail.split('@')[0],
+      encrypted.encrypted,
+      encrypted.iv,
+      encrypted.tag,
+      inboxId,
+      dailyLimit,
+      tags
+    ]);
+
+    console.log(`\n✅ Added AgentMail account: ${inboxEmail}`);
+    return;
   }
 
   // Get email
@@ -167,7 +231,8 @@ async function addAccount() {
     imap_port: null,
     status: 'active',
     daily_limit: dailyLimit,
-    emails_sent_today: 0
+    emails_sent_today: 0,
+    agentmail_inbox_id: null
   };
 
   const client = new EmailClient(testAccount);
@@ -426,7 +491,8 @@ async function updateAccount() {
     imap_port: null,
     status: 'active',
     daily_limit: 50,
-    emails_sent_today: 0
+    emails_sent_today: 0,
+    agentmail_inbox_id: null
   };
 
   const client = new EmailClient(testAccount);

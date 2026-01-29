@@ -516,6 +516,80 @@ app.get('/api/stats', async (req, res) => {
 });
 
 // ============================================================================
+// AgentMail Webhook
+// ============================================================================
+
+interface AgentMailMessage {
+  message_id: string;
+  thread_id: string;
+  from: string;
+  to: string[];
+  subject: string;
+  text?: string;
+}
+
+interface AgentMailWebhookEvent {
+  event_type: 'message.bounced' | 'message.received' | 'message.complained';
+  event_id: string;
+  message: AgentMailMessage;
+}
+
+app.post('/webhooks/agentmail', express.json(), async (req, res) => {
+  // Validate signature FIRST
+  const signature = req.headers['x-agentmail-signature'] as string;
+  const secret = process.env.AGENTMAIL_WEBHOOK_SECRET;
+
+  if (!secret) {
+    console.error('AGENTMAIL_WEBHOOK_SECRET not configured');
+    return res.status(500).send('Webhook not configured');
+  }
+
+  const payload = JSON.stringify(req.body);
+  const expected = crypto.createHmac('sha256', secret).update(payload).digest('hex');
+
+  if (!signature || !crypto.timingSafeEqual(Buffer.from(signature), Buffer.from(expected))) {
+    return res.status(401).send('Invalid signature');
+  }
+
+  // Signature valid - respond OK
+  res.status(200).send('OK');
+
+  // Process event
+  const event: AgentMailWebhookEvent = req.body;
+  const { event_type, message } = event;
+
+  try {
+    if (event_type === 'message.bounced') {
+      const recipient = message.to?.[0];
+      if (recipient) {
+        await pool.query(
+          `UPDATE campaign_prospects SET status = 'bounced', updated_at = NOW()
+           WHERE contact_email = $1 AND status = 'sent'`,
+          [recipient]
+        );
+        console.log(`Marked ${recipient} as bounced`);
+      }
+    } else if (event_type === 'message.received') {
+      await pool.query(
+        `UPDATE campaign_prospects SET status = 'replied', last_replied_at = NOW(), updated_at = NOW()
+         WHERE contact_email = $1 AND status IN ('sent', 'delivered', 'opened')`,
+        [message.from]
+      );
+      console.log(`Marked reply from ${message.from}`);
+    } else if (event_type === 'message.complained') {
+      await pool.query(
+        `UPDATE campaign_prospects SET status = 'unsubscribed', updated_at = NOW()
+         WHERE contact_email = $1`,
+        [message.to?.[0]]
+      );
+      console.log(`Marked complaint for ${message.to?.[0]}`);
+    }
+  } catch (err: any) {
+    console.error(`Webhook processing error: ${err.message}`);
+  }
+});
+
+// ============================================================================
 // Frontend Routes
 // ============================================================================
 

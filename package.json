@@ -21,6 +21,7 @@
     "db:setup": "psql $DATABASE_URL -f schema/campaigns.sql && psql $DATABASE_URL -f schema/inbox.sql"
   },
   "dependencies": {
+    "agentmail": "^0.2.6",
     "axios": "^1.7.7",
     "csv-parse": "^6.1.0",
     "dotenv": "^16.4.7",

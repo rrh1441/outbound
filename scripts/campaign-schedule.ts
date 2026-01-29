@@ -27,8 +27,8 @@ interface SenderAccount {
   id: string;
   email: string;
   display_name: string | null;
-  provider: 'gmail' | 'microsoft';
-  auth_type: 'oauth' | 'password';
+  provider: 'gmail' | 'microsoft' | 'agentmail';
+  auth_type: 'oauth' | 'password' | 'api_key';
   status: 'active' | 'paused' | 'error';
   daily_limit: number;
   emails_sent_today: number;
@@ -67,12 +67,35 @@ async function sendEmailViaApi(account: SenderAccount, options: {
   });
 
   if (!response.ok) {
-    const error = await response.json().catch(() => ({ error: response.statusText }));
+    const error = await response.json().catch(() => ({ error: response.statusText })) as { error?: string };
     throw new Error(error.error || `API error: ${response.status}`);
   }
 
-  const result = await response.json();
+  const result = await response.json() as { message_id?: string };
   return { messageId: result.message_id || '' };
+}
+
+// Send with fallback to secondary account
+async function sendWithFallback(
+  primaryAccount: SenderAccount,
+  fallbackAccount: SenderAccount | null,
+  options: { to: string; subject: string; bodyHtml: string; bodyText?: string }
+): Promise<{ messageId: string; usedFallback: boolean; senderEmail: string }> {
+  try {
+    const result = await sendEmailViaApi(primaryAccount, options);
+    return { messageId: result.messageId, usedFallback: false, senderEmail: primaryAccount.email };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.error(`   Primary send failed (${primaryAccount.email}): ${message}`);
+
+    if (!fallbackAccount) {
+      throw error;
+    }
+
+    console.log(`   Falling back to ${fallbackAccount.email}`);
+    const result = await sendEmailViaApi(fallbackAccount, options);
+    return { messageId: result.messageId, usedFallback: true, senderEmail: fallbackAccount.email };
+  }
 }
 
 config();
@@ -212,21 +235,39 @@ function getRandomDailyLimit(): number {
 
 /**
  * Load sender accounts from database (uses enabled_for_sending flag)
+ * Prioritizes AgentMail, then Microsoft
  */
 async function loadSenderAccounts(): Promise<SenderAccount[]> {
   const result = await pool.query<SenderAccount>(`
     SELECT *
     FROM sender_accounts
     WHERE status = 'active'
-      AND provider = 'microsoft'
+      AND provider IN ('agentmail', 'microsoft')
       AND enabled_for_sending = true
-    ORDER BY email
+    ORDER BY
+      CASE provider WHEN 'agentmail' THEN 0 ELSE 1 END,
+      email
   `);
 
   // Update config with loaded accounts for reference
   SCHEDULE_CONFIG.senderAccounts = result.rows.map(r => r.email);
 
   return result.rows;
+}
+
+/**
+ * Get a fallback account (Gmail) for when primary fails
+ */
+async function getFallbackAccount(): Promise<SenderAccount | null> {
+  const result = await pool.query<SenderAccount>(`
+    SELECT *
+    FROM sender_accounts
+    WHERE status = 'active'
+      AND provider = 'gmail'
+      AND auth_type = 'oauth'
+    LIMIT 1
+  `);
+  return result.rows[0] || null;
 }
 
 /**
@@ -606,6 +647,12 @@ async function runScheduledSend(campaignId: string, options: {
   console.log('━'.repeat(80));
   console.log('📤 Starting scheduled send...\n');
 
+  // Load fallback account for when primary fails
+  const fallbackAccount = await getFallbackAccount();
+  if (fallbackAccount) {
+    console.log(`📧 Fallback account: ${fallbackAccount.email}`);
+  }
+
   // Send one email - returns true if sent, false if skipped/failed
   async function sendOneEmail(prospect: Prospect, senderAccount: SenderAccount): Promise<boolean> {
     const meta = prospect.metadata || {};
@@ -679,25 +726,25 @@ async function runScheduledSend(campaignId: string, options: {
     // Mark as sending
     await pool.query(`UPDATE campaign_prospects SET status = 'sending', updated_at = NOW() WHERE id = $1`, [prospect.id]);
 
-    // Send via API
-    const result = await sendEmailViaApi(senderAccount, {
+    // Send via API with fallback
+    const result = await sendWithFallback(senderAccount, fallbackAccount, {
       to: actualRecipient,
       subject,
       bodyHtml,
       bodyText: bodyHtml.replace(/<[^>]*>/g, '')
     });
 
-    // Mark as sent and store sender_email
+    // Mark as sent and store sender_email (could be fallback)
     await pool.query(
       `UPDATE campaign_prospects SET status = 'sent', sender_email = $2, gmail_message_id = $3, last_sent_at = NOW(), updated_at = NOW() WHERE id = $1`,
-      [prospect.id, senderAccount.email, result.messageId || '']
+      [prospect.id, result.senderEmail, result.messageId || '']
     );
 
     // Record in campaign_emails (non-critical)
     try {
       await pool.query(
         `INSERT INTO campaign_emails (prospect_id, campaign_id, direction, gmail_message_id, gmail_thread_id, subject, from_email, to_email, body_html, body_text, sent_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, NOW())`,
-        [prospect.id, campaign.id, 'outbound', result.messageId || '', result.messageId || '', subject, senderAccount.email, actualRecipient, bodyHtml, bodyHtml.replace(/<[^>]*>/g, '')]
+        [prospect.id, campaign.id, 'outbound', result.messageId || '', result.messageId || '', subject, result.senderEmail, actualRecipient, bodyHtml, bodyHtml.replace(/<[^>]*>/g, '')]
       );
     } catch (e) { /* ignore */ }
 
@@ -705,12 +752,12 @@ async function runScheduledSend(campaignId: string, options: {
     try {
       await pool.query(
         `INSERT INTO campaign_tracking (prospect_id, campaign_id, event_type, tracking_token, metadata) VALUES ($1, $2, $3, $4, $5)`,
-        [prospect.id, campaign.id, 'email_sent', prospect.tracking_token, JSON.stringify({ message_id: result.messageId, sender: senderAccount.email })]
+        [prospect.id, campaign.id, 'email_sent', prospect.tracking_token, JSON.stringify({ message_id: result.messageId, sender: result.senderEmail, usedFallback: result.usedFallback })]
       );
     } catch (e) { /* ignore */ }
 
-    await incrementSendCount(senderAccount.email);
-    console.log('   ✅ Sent\n');
+    await incrementSendCount(result.senderEmail);
+    console.log(`   ✅ Sent${result.usedFallback ? ' (via fallback)' : ''}\n`);
     return true;
   }
 

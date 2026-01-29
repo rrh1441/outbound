@@ -90,8 +90,8 @@ export interface EmailMessage {
   headers: Record<string, string>;
 }
 
-// Provider-specific configurations
-const PROVIDER_CONFIG = {
+// Provider-specific configurations (agentmail doesn't use SMTP/IMAP)
+const PROVIDER_CONFIG: Record<string, { smtp: { host: string; port: number; secure: boolean }; imap: { host: string; port: number; tls: boolean } }> = {
   gmail: {
     smtp: { host: 'smtp.gmail.com', port: 587, secure: false },
     imap: { host: 'imap.gmail.com', port: 993, tls: true }
