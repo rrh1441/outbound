@@ -161,8 +161,9 @@ export class EmailClient {
         pass: this.credentials.password
       },
       tls: {
-        ciphers: 'SSLv3',
-        rejectUnauthorized: false
+        // Validate the server certificate and require modern TLS.
+        minVersion: 'TLSv1.2',
+        rejectUnauthorized: true
       }
     });
 
@@ -350,7 +351,7 @@ export class EmailClient {
           host: imapHost,
           port: imapPort,
           tls: true,
-          tlsOptions: { rejectUnauthorized: false },
+          tlsOptions: { rejectUnauthorized: true, minVersion: 'TLSv1.2' },
           authTimeout: 15000,
           connTimeout: 15000
         });
@@ -370,7 +371,7 @@ export class EmailClient {
         host: imapHost,
         port: imapPort,
         tls: true,
-        tlsOptions: { rejectUnauthorized: false },
+        tlsOptions: { rejectUnauthorized: true, minVersion: 'TLSv1.2' },
         authTimeout: 10000,
         connTimeout: 10000
       });

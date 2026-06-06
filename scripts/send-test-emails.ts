@@ -88,7 +88,7 @@ async function sendTestEmails() {
           port: account.smtp_port || 587,
           secure: false,
           auth: { user: account.email, pass: credentials.password },
-          tls: { ciphers: 'SSLv3', rejectUnauthorized: false }
+          tls: { minVersion: 'TLSv1.2', rejectUnauthorized: true }
         });
 
         await transporter.sendMail({
