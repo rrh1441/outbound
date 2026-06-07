@@ -194,9 +194,9 @@ outbound/
    - Line ~200: `ryanrheger@gmail.com` as fallback
    - Replace with config or remove
 
-2. **`email-client.ts` has bad TLS settings**
-   - `rejectUnauthorized: false` and `ciphers: 'SSLv3'`
-   - Fix or remove these for production
+2. ~~**`email-client.ts` has bad TLS settings**~~ ✅ FIXED
+   - Was `rejectUnauthorized: false` and `ciphers: 'SSLv3'`
+   - Now `rejectUnauthorized: true` + `minVersion: 'TLSv1.2'` (cert validation on, modern TLS)
 
 3. **`lib/campaigns/email.ts` imports ApolloPerson type**
    - Line 8: `import type { ApolloPerson } from '../../apps/campaigns/core/apollo-client.js'`
